@@ -225,11 +225,11 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
                     self.onError(self, error);
                 }
             }
-        
+            
             if([self.session canAddInput:_audioDeviceInput]) {
                 [self.session addInput:_audioDeviceInput];
             }
-        
+            
             _movieFileOutput = [[AVCaptureMovieFileOutput alloc] init];
             if([self.session canAddOutput:_movieFileOutput]) {
                 [self.session addOutput:_movieFileOutput];
@@ -262,48 +262,48 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
     
     if(!self.session) {
         NSError *error = [NSError errorWithDomain:LLSimpleCameraErrorDomain
-                                    code:LLSimpleCameraErrorCodeSession
-                                userInfo:nil];
+                                             code:LLSimpleCameraErrorCodeSession
+                                         userInfo:nil];
         onCapture(self, nil, nil, error);
         return;
     }
     
     // get connection and set orientation
-    AVCaptureConnection *videoConnection = [self captureConnection];
+    AVCaptureConnection *videoConnection = [self stillImageConnection];
     videoConnection.videoOrientation = [self orientationForConnection];
     
     // freeze the screen
     [self.captureVideoPreviewLayer.connection setEnabled:NO];
     
     [self.stillImageOutput captureStillImageAsynchronouslyFromConnection:videoConnection completionHandler: ^(CMSampleBufferRef imageSampleBuffer, NSError *error) {
-         
-         UIImage *image = nil;
-         NSDictionary *metadata = nil;
-         
-         // check if we got the image buffer
-         if (imageSampleBuffer != NULL) {
-             CFDictionaryRef exifAttachments = CMGetAttachment(imageSampleBuffer, kCGImagePropertyExifDictionary, NULL);
-             if(exifAttachments) {
-                 metadata = (__bridge NSDictionary*)exifAttachments;
-             }
-             
-             NSData *imageData = [AVCaptureStillImageOutput jpegStillImageNSDataRepresentation:imageSampleBuffer];
-             image = [[UIImage alloc] initWithData:imageData];
-             
-             if(exactSeenImage) {
-                 image = [self cropImageUsingPreviewBounds:image];
-             }
-             
-             if(self.fixOrientationAfterCapture) {
-                 image = [image fixOrientation];
-             }
-         }
-         
-         // trigger the block
-         if(onCapture) {
-             onCapture(self, image, metadata, error);
-         }
-     }];
+        
+        UIImage *image = nil;
+        NSDictionary *metadata = nil;
+        
+        // check if we got the image buffer
+        if (imageSampleBuffer != NULL) {
+            CFDictionaryRef exifAttachments = CMGetAttachment(imageSampleBuffer, kCGImagePropertyExifDictionary, NULL);
+            if(exifAttachments) {
+                metadata = (__bridge NSDictionary*)exifAttachments;
+            }
+            
+            NSData *imageData = [AVCaptureStillImageOutput jpegStillImageNSDataRepresentation:imageSampleBuffer];
+            image = [[UIImage alloc] initWithData:imageData];
+            
+            if(exactSeenImage) {
+                image = [self cropImageUsingPreviewBounds:image];
+            }
+            
+            if(self.fixOrientationAfterCapture) {
+                image = [image fixOrientation];
+            }
+        }
+        
+        // trigger the block
+        if(onCapture) {
+            onCapture(self, image, metadata, error);
+        }
+    }];
 }
 
 -(void)capture:(void (^)(LLSimpleCamera *camera, UIImage *image, NSDictionary *metadata, NSError *error))onCapture {
@@ -329,6 +329,15 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
     if(self.flash == CameraFlashOn) {
         [self enableTorch:YES];
     }
+    
+    AVCaptureConnection *videoConnection = [self movieFileConnection];
+    
+    if([videoConnection isVideoOrientationSupported])
+    {
+        videoConnection.videoOrientation = [self orientationForConnection];
+    }
+    
+    
     [self.movieFileOutput startRecordingToOutputFileURL:url recordingDelegate:self];
 }
 
@@ -391,10 +400,28 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
     return image;
 }
 
-- (AVCaptureConnection *)captureConnection {
+- (AVCaptureConnection *)stillImageConnection {
     
     AVCaptureConnection *videoConnection = nil;
     for (AVCaptureConnection *connection in self.stillImageOutput.connections) {
+        for (AVCaptureInputPort *port in [connection inputPorts]) {
+            if ([[port mediaType] isEqual:AVMediaTypeVideo]) {
+                videoConnection = connection;
+                break;
+            }
+        }
+        if (videoConnection) {
+            break;
+        }
+    }
+    
+    return videoConnection;
+}
+
+- (AVCaptureConnection *)movieFileConnection {
+    
+    AVCaptureConnection *videoConnection = nil;
+    for (AVCaptureConnection *connection in self.movieFileOutput.connections) {
         for (AVCaptureInputPort *port in [connection inputPorts]) {
             if ([[port mediaType] isEqual:AVMediaTypeVideo]) {
                 videoConnection = connection;
@@ -664,7 +691,7 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
 - (void)viewWillLayoutSubviews {
     [super viewWillLayoutSubviews];
     
-//    NSLog(@"layout cameraVC : %d", self.interfaceOrientation);
+    //    NSLog(@"layout cameraVC : %d", self.interfaceOrientation);
     
     self.preview.frame = CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height);
     
