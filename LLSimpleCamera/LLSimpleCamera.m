@@ -574,6 +574,14 @@ NSString *const LLSimpleCameraErrorDomain = @"LLSimpleCameraErrorDomain";
     return nil;
 }
 
+- (void)setCameraQuality:(NSString *)cameraQuality
+{
+    _cameraQuality = cameraQuality;
+    if(_session && [_session canSetSessionPreset:cameraQuality]){
+        _session.sessionPreset = cameraQuality;
+    }
+}
+
 #pragma mark Focus
 
 - (void) focusAtPoint:(CGPoint)point
